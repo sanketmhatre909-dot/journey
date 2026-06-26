@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Happy Journey, Motuuu! ✈️🍩</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Segoe UI', sans-serif;
+    overflow: hidden;
+  }
+  h1 {
+    color: #FFD93D;
+    font-size: clamp(14px, 2.5vw, 22px);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-shadow: 0 0 20px rgba(255,217,61,0.5);
+    opacity: 0.85;
+  }
+  #wrap {
+    position: relative;
+    width: min(800px, 96vw);
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    border-radius: 20px;
+    box-shadow: 0 0 60px rgba(255,107,107,0.3), 0 20px 60px rgba(0,0,0,0.5);
+  }
+  #btn-wrap {
+    text-align: center;
+    margin-top: 18px;
+  }
+  #beginBtn {
+    font-family: 'Segoe UI', sans-serif;
+    font-size: clamp(13px, 2vw, 17px);
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+    background: linear-gradient(135deg, #FF6B6B, #FF8E53, #FFD93D);
+    border: none;
+    border-radius: 50px;
+    padding: 14px 48px;
+    cursor: pointer;
+    box-shadow: 0 0 30px rgba(255,140,80,0.7), 0 6px 20px rgba(0,0,0,0.3);
+    transition: transform .15s, box-shadow .15s;
+    text-transform: uppercase;
+  }
+  #beginBtn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 50px rgba(255,140,80,1), 0 8px 28px rgba(0,0,0,0.35);
+  }
+  #beginBtn:active { transform: scale(0.97); }
+  #beginBtn:disabled { opacity: 0.5; cursor: default; transform: none; }
+  #tagline {
+    color: rgba(255,255,255,0.35);
+    font-size: 11px;
+    margin-top: 10px;
+    letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+<h1>✈️ &nbsp; A Special Send-Off &nbsp; ✈️</h1>
+<div id="wrap">
+  <canvas id="c" width="800" height="450"></canvas>
+</div>
+<div id="btn-wrap">
+  <button id="beginBtn">✈️ Begin Adventure</button>
+  <p id="tagline">tap to launch the journey</p>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 800, H = 450;
+let t = 0, phase = 'idle', phaseT = 0, raf = null;
+let smokeParticles = [], sparkParticles = [], exhaustParticles = [];
+let titleAlpha = 0, subAlpha = 0, titleScale = 0.5, skyAlpha = 0;
+let cloudOffset = 0, mountainOffset = 0;
+let girlX = -60, girlY = 0, girlVY = 0, girlOnPlane = false;
+let runFrame = 0, squash = 1, stretch = 1;
+let planeX = 540, planeY = 0, planeTilt = 0, planeScale = 1;
+let doorSlam = 0, engineRev = 0, wobble = 0;
+let oomphAlpha = 0, oomphScale = 0;
+let smokeTrail = [];
+
+function easeOut(x){ return 1-Math.pow(1-x,3); }
+function easeInOut(x){ return x<0.5?2*x*x:1-Math.pow(-2*x+2,2)/2; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+function drawSky(progress){
+  let g = ctx.createLinearGradient(0,0,0,H*0.65);
+  g.addColorStop(0, progress > 0.85 ? '#4FC3F7' : '#87CEEB');
+  g.addColorStop(1, '#E8F8FF');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H*0.65);
+}
+
+function drawMountains(offset){
+  ctx.save();
+  ctx.fillStyle = '#B8D4C8';
+  ctx.beginPath();
+  let pts1 = [[-50,0.35],[80,0.25],[180,0.38],[300,0.22],[420,0.34],[550,0.2],[680,0.32],[820,0.28],[900,0.4]];
+  pts1.forEach(([x,y],i) => {
+    let ox = x + offset*0.2;
+    if(i===0) ctx.moveTo(ox, H*y); else ctx.lineTo(ox, H*y);
+  });
+  ctx.lineTo(W+100,H*0.55); ctx.lineTo(0,H*0.55); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8FBF9F';
+  ctx.beginPath();
+  [[-30,0.45],[100,0.38],[220,0.47],[360,0.36],[480,0.44],[600,0.37],[750,0.43],[850,0.42]].forEach(([x,y],i) => {
+    let ox = x + offset*0.4;
+    if(i===0) ctx.moveTo(ox,H*y); else ctx.lineTo(ox,H*y);
+  });
+  ctx.lineTo(W+100,H*0.55); ctx.lineTo(0,H*0.55); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawClouds(offset){
+  ctx.save();
+  let clouds = [{x:80,y:60,r:32},{x:220,y:40,r:22},{x:460,y:75,r:40},{x:640,y:50,r:28},{x:750,y:80,r:20},{x:900,y:55,r:35}];
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  clouds.forEach(({x,y,r}) => {
+    let cx = ((x+offset*0.15)%950)-50;
+    ctx.beginPath();
+    ctx.arc(cx,y,r,0,Math.PI*2);
+    ctx.arc(cx+r*0.7,y-r*0.3,r*0.7,0,Math.PI*2);
+    ctx.arc(cx+r*1.3,y,r*0.8,0,Math.PI*2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawRunway(){
+  let gg = ctx.createLinearGradient(0,H*0.55,0,H);
+  gg.addColorStop(0,'#6B9E5E'); gg.addColorStop(0.15,'#5A8A4E'); gg.addColorStop(1,'#4A7A40');
+  ctx.fillStyle = gg;
+  ctx.fillRect(0,H*0.55,W,H*0.45);
+  ctx.fillStyle = '#555';
+  ctx.fillRect(0, H*0.62, W, H*0.2);
+  ctx.fillStyle = '#FFF';
+  ctx.globalAlpha = 0.7;
+  for(let i=0;i<12;i++){
+    let x = (i*90 - cloudOffset*0.8 + W*10) % (W+90) - 90;
+    ctx.fillRect(x, H*0.70, 60, 6);
+  }
+  ctx.globalAlpha = 1;
+  for(let i=0;i<10;i++){
+    let lx = i*90+20;
+    ctx.fillStyle = i%2===0?'#FFD700':'#FF4444';
+    ctx.beginPath(); ctx.arc(lx, H*0.635, 5, 0, Math.PI*2); ctx.fill();
+  }
+}
+
+function drawGirl(x, yOff, frame, sq, st, alpha){
+  if(alpha === undefined) alpha = 1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, H*0.66 + yOff);
+  ctx.scale(1/st, st);
+  let bob = Math.sin(frame*0.4)*3;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.15)';
+  ctx.beginPath(); ctx.ellipse(0,30*sq,14,4,0,0,Math.PI*2); ctx.fill();
+  // Legs
+  let lk = Math.sin(frame*0.4)*18;
+  ctx.strokeStyle='#FF6B9D'; ctx.lineWidth=5; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-3,10*sq); ctx.lineTo(-8+lk,28*sq); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-3,10*sq); ctx.lineTo(2-lk,28*sq); ctx.stroke();
+  // Shoes
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.ellipse(-8+lk,29*sq,5,3,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2-lk,29*sq,5,3,0,0,Math.PI*2); ctx.fill();
+  // Body
+  ctx.fillStyle='#FF6B9D';
+  ctx.beginPath(); ctx.roundRect(-10,-5*sq,20,18*sq,4); ctx.fill();
+  // Backpack
+  ctx.fillStyle='#7B68EE';
+  ctx.beginPath(); ctx.roundRect(6,-8*sq,10,14*sq,3); ctx.fill();
+  ctx.fillStyle='#9B88FF';
+  ctx.beginPath(); ctx.roundRect(8,-5*sq,6,8*sq,2); ctx.fill();
+  // Arms
+  let ak = Math.cos(frame*0.4)*14;
+  ctx.strokeStyle='#FDBCB4'; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(-6,-1*sq); ctx.lineTo(-14+ak,-10*sq); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6,-1*sq); ctx.lineTo(14-ak,-10*sq); ctx.stroke();
+  // Neck+Head
+  ctx.fillStyle='#FDBCB4';
+  ctx.beginPath(); ctx.roundRect(-7,-22*sq-bob,14,20*sq,8); ctx.fill();
+  // Hair
+  ctx.fillStyle='#3D2B1F';
+  ctx.beginPath(); ctx.arc(0,-20*sq-bob,8,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(-7,-26*sq-bob,4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7,-26*sq-bob,4,0,Math.PI*2); ctx.fill();
+  // Face
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(-3,-20*sq-bob,1.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3,-20*sq-bob,1.5,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#CC5577'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(0,-18*sq-bob,3,0.2,Math.PI-0.2); ctx.stroke();
+  ctx.restore();
+}
+
+function drawPlane(x, y, tilt, scale, revLevel){
+  ctx.save();
+  ctx.translate(x, H*0.63 + y);
+  ctx.rotate(tilt);
+  ctx.scale(scale, scale);
+  // Shadow
+  if(y > -30){
+    ctx.fillStyle='rgba(0,0,0,0.12)';
+    ctx.beginPath(); ctx.ellipse(0,48,70,10,0,0,Math.PI*2); ctx.fill();
+  }
+  // Exhaust smoke
+  if(revLevel > 0.3 && Math.random()>0.5){
+    exhaustParticles.push({
+      x:-110-Math.random()*30, y:15+(Math.random()-0.5)*10,
+      vx:-3-Math.random()*2, vy:(Math.random()-0.5)*1.5,
+      life:1, r:4+Math.random()*6,
+      color:Math.random()>0.5?'#888':'#AAA'
+    });
+  }
+  // Draw exhaust particles in plane-local space
+  exhaustParticles.forEach(p => {
+    ctx.save(); ctx.globalAlpha=p.life*0.5; ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+  });
+  // Fuselage
+  let fg = ctx.createLinearGradient(-100,0,100,0);
+  fg.addColorStop(0,'#E8EEF5'); fg.addColorStop(0.5,'#FFFFFF'); fg.addColorStop(1,'#C8D4E0');
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.moveTo(-110,0);
+  ctx.bezierCurveTo(-130,-5,-135,20,-120,22);
+  ctx.lineTo(85,22);
+  ctx.bezierCurveTo(115,22,120,0,110,-15);
+  ctx.bezierCurveTo(90,-28,20,-30,-30,-28);
+  ctx.bezierCurveTo(-70,-28,-100,-15,-110,0);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#99AACC'; ctx.lineWidth=1.5; ctx.stroke();
+  // Wing
+  ctx.fillStyle='#D0D8E8';
+  ctx.beginPath();
+  ctx.moveTo(-20,15); ctx.bezierCurveTo(-30,15,-80,45,-100,55);
+  ctx.lineTo(-90,58); ctx.bezierCurveTo(-60,50,-10,22,5,22);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#99AACC'; ctx.lineWidth=1; ctx.stroke();
+  // Tail fin
+  ctx.fillStyle='#D0D8E8';
+  ctx.beginPath();
+  ctx.moveTo(-95,-10); ctx.bezierCurveTo(-110,-35,-105,-50,-90,-48);
+  ctx.lineTo(-70,-10); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#99AACC'; ctx.lineWidth=1; ctx.stroke();
+  // Horizontal stabilizer
+  ctx.fillStyle='#D0D8E8';
+  ctx.beginPath();
+  ctx.moveTo(-105,10); ctx.bezierCurveTo(-115,8,-125,15,-120,20);
+  ctx.lineTo(-100,20); ctx.closePath(); ctx.fill();
+  // Engine
+  ctx.fillStyle='#AABBD0';
+  ctx.beginPath(); ctx.roundRect(-80,20,40,14,3); ctx.fill();
+  ctx.fillStyle='#889AAA';
+  ctx.beginPath(); ctx.roundRect(-85,22,12,10,2); ctx.fill();
+  // Windows
+  for(let i=0;i<5;i++){
+    let wx = 60-i*28;
+    ctx.beginPath(); ctx.ellipse(wx,-8,6,7,0,0,Math.PI*2);
+    ctx.fillStyle=`rgba(168,216,240,${0.7+Math.sin(revLevel*10+i)*0.1})`;
+    ctx.fill();
+    ctx.strokeStyle='#99AACC'; ctx.lineWidth=0.8; ctx.stroke();
+  }
+  // Door
+  ctx.fillStyle = doorSlam>0.5?'#CC6644':'#B0B8CC';
+  ctx.beginPath(); ctx.roundRect(30,-18,18,22,2); ctx.fill();
+  ctx.strokeStyle='#8899AA'; ctx.lineWidth=1; ctx.stroke();
+  if(doorSlam>0.5){
+    ctx.strokeStyle='#FF6644'; ctx.lineWidth=2;
+    for(let i=0;i<5;i++){
+      let a=(-20+i*15)*Math.PI/180;
+      ctx.beginPath(); ctx.moveTo(48,-7); ctx.lineTo(48+Math.cos(a)*10,-7+Math.sin(a)*10); ctx.stroke();
+    }
+  }
+  // Airline stripes
+  ctx.fillStyle='#FF6B9D';
+  ctx.fillRect(-100,4,195,5);
+  ctx.fillStyle='#FFD93D';
+  ctx.fillRect(-100,9,195,2.5);
+  // Nose dot
+  ctx.fillStyle='#FF6B9D';
+  ctx.beginPath(); ctx.arc(108,-8,6,0,Math.PI*2); ctx.fill();
+  // Wheels (only on ground)
+  if(y >= -10){
+    ctx.fillStyle='#333';
+    ctx.beginPath(); ctx.arc(-60,45,8,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(30,45,8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#555'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(-60,22); ctx.lineTo(-60,38); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(30,22); ctx.lineTo(30,38); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawOomph(x, y, alpha, scale){
+  if(alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, H*0.63 + y - 65);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#FFD93D';
+  ctx.beginPath(); ctx.roundRect(-80,-28,160,50,20); ctx.fill();
+  ctx.strokeStyle='#FF6B00'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#FFD93D';
+  [[-60,-28],[0,-30],[60,-28],[80,-10],[70,20],[50,22],[-40,22],[-70,10],[-80,-10]].forEach(([sx,sy]) => {
+    let a = Math.atan2(sy,sx);
+    ctx.beginPath(); ctx.moveTo(sx,sy);
+    ctx.lineTo(sx+Math.cos(a)*12,sy+Math.sin(a)*12);
+    ctx.lineTo(sx+Math.cos(a+0.4)*8,sy+Math.sin(a+0.4)*8);
+    ctx.closePath(); ctx.fill();
+  });
+  ctx.fillStyle='#8B0000';
+  ctx.font='bold 16px "Segoe UI", sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('HEAVY LOAD!', 0, -6);
+  ctx.font='bold 11px "Segoe UI", sans-serif';
+  ctx.fillStyle='#A00020';
+  ctx.fillText('oomph... \u2708\uFE0F\uD83C\uDF69', 0, 12);
+  ctx.restore();
+}
+
+function drawParticles(){
+  smokeParticles.forEach(p => {
+    ctx.save(); ctx.globalAlpha=p.life*0.5; ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+  });
+  sparkParticles.forEach(p => {
+    ctx.save(); ctx.globalAlpha=p.life; ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+  });
+}
+
+function updateParticles(){
+  smokeParticles=smokeParticles.filter(p=>{ p.x+=p.vx;p.y+=p.vy;p.life-=0.015;p.r+=0.2;return p.life>0; });
+  sparkParticles=sparkParticles.filter(p=>{ p.x+=p.vx;p.y+=p.vy;p.vy+=0.3;p.life-=0.04;return p.life>0; });
+  exhaustParticles=exhaustParticles.filter(p=>{ p.x+=p.vx;p.y+=p.vy;p.life-=0.025;p.r+=0.3;return p.life>0; });
+}
+
+function addSpark(x,y){
+  for(let i=0;i<6;i++){
+    let a=Math.random()*Math.PI*2;
+    sparkParticles.push({x,y,vx:Math.cos(a)*(2+Math.random()*4),vy:Math.sin(a)*(2+Math.random()*4)-2,life:1,r:3+Math.random()*3,color:Math.random()>0.5?'#FFD700':'#FF6B00'});
+  }
+}
+
+function drawSmokeTrail(){
+  smokeTrail.forEach(p=>{
+    ctx.save(); ctx.globalAlpha=p.life*0.4; ctx.fillStyle='#DDD';
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill(); ctx.restore();
+  });
+}
+function updateSmokeTrail(){
+  smokeTrail=smokeTrail.filter(p=>{ p.x-=0.2;p.life-=0.008;p.r+=0.4;return p.life>0; });
+}
+
+function drawEndText(){
+  if(skyAlpha > 0){
+    ctx.save(); ctx.globalAlpha=skyAlpha;
+    let sg=ctx.createLinearGradient(0,0,0,H);
+    sg.addColorStop(0,'#87CEEB'); sg.addColorStop(1,'#E0F4FF');
+    ctx.fillStyle=sg; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    [[100,80,40],[300,50,30],[550,90,50],[700,60,35]].forEach(([cx,cy,r])=>{
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+      ctx.arc(cx+r*0.7,cy-r*0.3,r*0.7,0,Math.PI*2);
+      ctx.arc(cx+r*1.3,cy,r*0.8,0,Math.PI*2); ctx.fill();
+    });
+    ctx.restore();
+  }
+  if(titleAlpha > 0){
+    ctx.save();
+    ctx.translate(W/2, H*0.38);
+    let s = lerp(0.5,1,easeOut(titleScale));
+    ctx.scale(s,s);
+    ctx.globalAlpha=titleAlpha;
+    ctx.font='bold 38px "Segoe UI", Georgia, serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.strokeStyle='rgba(255,255,255,0.9)'; ctx.lineWidth=6;
+    ctx.strokeText('Happy journey, motuuu! \u2708\uFE0F\uD83C\uDF69', 0, 0);
+    let tg=ctx.createLinearGradient(-200,0,200,0);
+    tg.addColorStop(0,'#FF6B6B'); tg.addColorStop(0.5,'#FF8E53'); tg.addColorStop(1,'#FFD93D');
+    ctx.fillStyle=tg;
+    ctx.fillText('Happy journey, motuuu! \u2708\uFE0F\uD83C\uDF69', 0, 0);
+    ctx.restore();
+  }
+  if(subAlpha > 0){
+    ctx.save();
+    ctx.globalAlpha=subAlpha;
+    ctx.font='italic 17px "Segoe UI", Georgia, serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#4A6E8A';
+    ctx.strokeStyle='rgba(255,255,255,0.8)'; ctx.lineWidth=4;
+    let txt='The pilot requested extra fuel just for this flight. Have a safe trip!';
+    ctx.strokeText(txt, W/2, H*0.52);
+    ctx.fillText(txt, W/2, H*0.52);
+    ctx.restore();
+  }
+}
+
+let dt = 1/60;
+function tick(){
+  t += dt; phaseT += dt;
+  cloudOffset += 1.2; mountainOffset += 0.8;
+  updateParticles(); updateSmokeTrail();
+
+  if(phase==='run'){
+    girlX += 3.5; runFrame += 1; squash=1; stretch=1;
+    if(girlX >= planeX-90){ phase='hop'; phaseT=0; }
+  }
+  if(phase==='hop'){
+    let ht=phaseT;
+    if(ht<0.2){ stretch=1+ht*3; squash=1-ht*1.5; }
+    else if(ht<0.6){
+      let frac=(ht-0.2)/0.4;
+      girlX+=5; girlY=-Math.sin(frac*Math.PI)*100;
+      stretch=1+Math.sin(frac*Math.PI)*0.5; squash=1;
+    } else if(ht<0.8){
+      squash=1+(ht-0.6)*2; stretch=1-(ht-0.6)*1.5; girlY=0;
+    } else {
+      girlOnPlane=true; phase='slam'; phaseT=0; girlY=-200;
+    }
+  }
+  if(phase==='slam'){
+    doorSlam=Math.min(1,phaseT*3);
+    if(phaseT>0.05&&phaseT<0.15){
+      for(let i=0;i<3;i++) smokeParticles.push({x:planeX+55,y:H*0.60,vx:(Math.random()-0.5)*2,vy:-1-Math.random(),life:1,r:5+Math.random()*5,color:'#CCC'});
+    }
+    if(phaseT>0.5){ phase='rev'; phaseT=0; doorSlam=0.7; }
+  }
+  if(phase==='rev'){
+    engineRev=Math.min(1,phaseT*1.5);
+    if(Math.random()>0.4){
+      smokeParticles.push({x:planeX-105,y:H*0.665,vx:-2-Math.random()*2,vy:-0.5-Math.random(),life:1,r:6+Math.random()*8,color:'#999'});
+    }
+    if(phaseT>1.2){ phase='liftoff'; phaseT=0; }
+  }
+  if(phase==='liftoff'){
+    planeX += lerp(0,6,easeOut(phaseT/1.5));
+    if(phaseT<0.5){
+      planeY=phaseT*60; planeTilt=0.08;
+      wobble=Math.sin(phaseT*20)*8;
+      oomphAlpha=Math.min(1,phaseT*4);
+      oomphScale=lerp(0.5,1.1,easeOut(phaseT*4));
+    } else if(phaseT<0.8){
+      let f=(phaseT-0.5)/0.3;
+      planeY=lerp(30,0,f);
+      oomphAlpha=Math.max(0,1-(phaseT-0.5)*4);
+      planeTilt=lerp(0.08,-0.12,f); wobble=0;
+      if(Math.random()>0.3) addSpark(planeX-100,H*0.66);
+    } else {
+      let f=(phaseT-0.8)/1.5;
+      planeY=lerp(0,-500,easeInOut(f));
+      planeTilt=-0.25; planeScale=lerp(1,0.3,easeInOut(f));
+      planeX+=4;
+      if(Math.random()>0.2) smokeTrail.push({x:planeX-100,y:H*0.63+planeY,life:1,r:8});
+      engineRev=1;
+    }
+    if(phaseT>2.3){ phase='fadeout'; phaseT=0; }
+  }
+  if(phase==='fadeout'){
+    skyAlpha=Math.min(1,phaseT*1.5);
+    if(phaseT>0.7){ titleAlpha=Math.min(1,(phaseT-0.7)*2); titleScale=Math.min(1,(phaseT-0.7)*2.5); }
+    if(phaseT>1.5) subAlpha=Math.min(1,(phaseT-1.5)*2);
+  }
+
+  ctx.clearRect(0,0,W,H);
+  if(phase!=='fadeout'||skyAlpha<0.95){
+    drawSky(phase==='liftoff'?Math.min(1,phaseT/2):0);
+    drawMountains(mountainOffset);
+    drawClouds(cloudOffset);
+    drawRunway();
+    drawSmokeTrail();
+    drawParticles();
+    drawPlane(planeX, planeY+wobble, planeTilt, planeScale, engineRev);
+    if(!girlOnPlane && girlY>-100)
+      drawGirl(girlX, girlY, runFrame, squash, stretch);
+    drawOomph(planeX, planeY, oomphAlpha, oomphScale);
+  }
+  drawEndText();
+  raf=requestAnimationFrame(tick);
+}
+
+function drawIdle(){
+  ctx.clearRect(0,0,W,H);
+  cloudOffset+=0.3;
+  drawSky(0);
+  drawMountains(mountainOffset);
+  drawClouds(cloudOffset);
+  drawRunway();
+  drawGirl(80,0,t*60,1,1);
+  drawPlane(540,0,0,1,0);
+  raf=requestAnimationFrame(drawIdle);
+}
+
+document.getElementById('beginBtn').addEventListener('click', function(){
+  this.disabled=true;
+  cancelAnimationFrame(raf);
+  t=0; phaseT=0; phase='run';
+  girlX=-60; girlY=0; girlOnPlane=false; runFrame=0;
+  planeX=540; planeY=0; planeTilt=0; planeScale=1;
+  doorSlam=0; engineRev=0; wobble=0;
+  oomphAlpha=0; oomphScale=0;
+  titleAlpha=0; subAlpha=0; titleScale=0.5; skyAlpha=0;
+  smokeParticles=[]; sparkParticles=[]; exhaustParticles=[]; smokeTrail=[];
+  squash=1; stretch=1;
+  raf=requestAnimationFrame(tick);
+  setTimeout(()=>{ this.disabled=false; }, 7000);
+});
+
+raf=requestAnimationFrame(drawIdle);
+</script>
+</body>
+</html>
